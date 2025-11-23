@@ -1,63 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BloopBot Camera Viewer</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #0a0f1a; color: #7be0ff; text-align: center; padding: 20px; }
-    video { width: 90%; max-width: 500px; border-radius: 20px; background: #000; margin: 20px 0; }
-    textarea { width: 90%; height: 100px; border-radius: 12px; font-size: 14px; padding: 10px; margin-bottom: 15px; }
-    input { width: 90%; padding: 10px; border-radius: 12px; font-size: 14px; margin-bottom: 10px; }
-    button { padding: 15px 25px; border: none; border-radius: 12px; background: #11c7ff; color: #002233; font-size: 18px; cursor: pointer; margin: 5px; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BloopBot Camera Viewer</title>
+<style>
+body { font-family: Arial, sans-serif; background: #0a0f1a; color: #7be0ff; text-align: center; padding: 20px; }
+video { width: 90%; max-width: 500px; border-radius: 20px; background: #000; margin: 20px 0; }
+</style>
 </head>
 <body>
-  <h1>BloopBot Camera Viewer</h1>
-  <video id="viewer" autoplay playsinline></video>
-  <div>
-    <textarea id="offer" placeholder="Paste OFFER from robot here"></textarea>
-    <button id="receive">Receive Stream</button>
-    <textarea id="answer" placeholder="Copy this ANSWER back to robot"></textarea>
-    <input id="remoteCandidate" placeholder="Paste ICE candidate from robot here" />
-    <button id="addCandidate">Add ICE Candidate</button>
-  </div>
+<h1>BloopBot Camera Viewer</h1>
+<video id="viewer" autoplay playsinline></video>
 
-  <script>
-    const video = document.getElementById('viewer');
-    const offerTextarea = document.getElementById('offer');
-    const answerTextarea = document.getElementById('answer');
-    const receiveBtn = document.getElementById('receive');
-    const remoteCandidateInput = document.getElementById('remoteCandidate');
-    const addCandidateBtn = document.getElementById('addCandidate');
 
-    let peer = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    });
+<script>
+const video = document.getElementById('viewer');
+const ws = new WebSocket('ws://127.0.0.1:5500'); // replace YOUR_SERVER_IP with your machine IP
+let peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
 
-    peer.ontrack = (event) => {
-      video.srcObject = event.streams[0];
-    };
 
-    peer.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log('Send this ICE candidate to robot app:', JSON.stringify(event.candidate));
-      }
-    };
+peer.ontrack = (event) => {
+video.srcObject = event.streams[0];
+};
 
-    receiveBtn.onclick = async () => {
-      const offer = JSON.parse(offerTextarea.value);
-      await peer.setRemoteDescription(offer);
-      const answer = await peer.createAnswer();
-      await peer.setLocalDescription(answer);
-      answerTextarea.value = JSON.stringify(answer);
-    };
 
-    addCandidateBtn.onclick = async () => {
-      const candidate = JSON.parse(remoteCandidateInput.value);
-      await peer.addIceCandidate(candidate);
-      remoteCandidateInput.value = '';
-    };
-  </script>
+peer.onicecandidate = (event) => {
+if(event.candidate) {
+ws.send(JSON.stringify({ type: 'ice', candidate: event.candidate }));
+}
+};
+
+
+ws.onmessage = async (event) => {
+const data = JSON.parse(event.data);
+if(data.type === 'offer') {
+await peer.setRemoteDescription(new RTCSessionDescription(data));
+const answer = await peer.createAnswer();
+await peer.setLocalDescription(answer);
+ws.send(JSON.stringify(answer));
+} else if(data.type === 'ice') {
+await peer.addIceCandidate(new RTCIceCandidate(data.candidate));
+}
+};
+</script>
 </body>
 </html>
